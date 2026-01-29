@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/scram"
 )
 
 type Event struct {
@@ -58,18 +62,64 @@ func main() {
 	analytics := &Analytics{db: db}
 
 	// Set up Kafka consumer
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		kafkaBroker = "localhost:9092"
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = "localhost:9092"
+	}
+	brokerList := strings.Split(kafkaBrokers, ",")
+
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		kafkaTopic = "game-events"
 	}
 
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{kafkaBroker},
-		Topic:    "game-events",
-		GroupID:  "analytics-service",
+	groupID := os.Getenv("KAFKA_GROUP_ID")
+	if groupID == "" {
+		groupID = "analytics-consumer"
+	}
+
+	// Configure Kafka reader
+	readerConfig := kafka.ReaderConfig{
+		Brokers:  brokerList,
+		Topic:    kafkaTopic,
+		GroupID:  groupID,
 		MinBytes: 10e3,
 		MaxBytes: 10e6,
-	})
+	}
+
+	// Configure SASL authentication if credentials are provided
+	username := os.Getenv("KAFKA_USERNAME")
+	password := os.Getenv("KAFKA_PASSWORD")
+	mechanism := os.Getenv("KAFKA_SASL_MECHANISM")
+
+	if username != "" && password != "" {
+		var scramMechanism sasl.Mechanism
+		var err error
+
+		switch mechanism {
+		case "SCRAM-SHA-256":
+			scramMechanism, err = scram.Mechanism(scram.SHA256, username, password)
+		case "SCRAM-SHA-512":
+			scramMechanism, err = scram.Mechanism(scram.SHA512, username, password)
+		default:
+			scramMechanism, err = scram.Mechanism(scram.SHA512, username, password)
+		}
+
+		if err != nil {
+			log.Fatal("Failed to create SASL mechanism:", err)
+		}
+
+		dialer := &kafka.Dialer{
+			Timeout:       10 * time.Second,
+			DualStack:     true,
+			SASLMechanism: scramMechanism,
+			TLS:           &tls.Config{},
+		}
+		readerConfig.Dialer = dialer
+		log.Println("Kafka consumer configured with SASL authentication")
+	}
+
+	reader := kafka.NewReader(readerConfig)
 	defer reader.Close()
 
 	log.Println("Analytics service started, listening for events...")

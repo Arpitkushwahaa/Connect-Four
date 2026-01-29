@@ -2,11 +2,15 @@ package services
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log"
+	"os"
 	"time"
 
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/scram"
 )
 
 type KafkaProducer struct {
@@ -14,14 +18,48 @@ type KafkaProducer struct {
 }
 
 func NewKafkaProducer(broker string) *KafkaProducer {
-	writer := &kafka.Writer{
-		Addr:         kafka.TCP(broker),
+	// Check if SASL authentication is needed
+	username := os.Getenv("KAFKA_USERNAME")
+	password := os.Getenv("KAFKA_PASSWORD")
+	mechanism := os.Getenv("KAFKA_SASL_MECHANISM")
+
+	writerConfig := kafka.WriterConfig{
+		Brokers:      []string{broker},
 		Topic:        "game-events",
 		Balancer:     &kafka.LeastBytes{},
 		WriteTimeout: 10 * time.Second,
 		ReadTimeout:  10 * time.Second,
 	}
 
+	// Configure SASL authentication if credentials are provided
+	if username != "" && password != "" {
+		var scramMechanism sasl.Mechanism
+		var err error
+
+		switch mechanism {
+		case "SCRAM-SHA-256":
+			scramMechanism, err = scram.Mechanism(scram.SHA256, username, password)
+		case "SCRAM-SHA-512":
+			scramMechanism, err = scram.Mechanism(scram.SHA512, username, password)
+		default:
+			scramMechanism, err = scram.Mechanism(scram.SHA512, username, password)
+		}
+
+		if err != nil {
+			log.Printf("Failed to create SASL mechanism: %v", err)
+		} else {
+			dialer := &kafka.Dialer{
+				Timeout:       10 * time.Second,
+				DualStack:     true,
+				SASLMechanism: scramMechanism,
+				TLS:           &tls.Config{},
+			}
+			writerConfig.Dialer = dialer
+			log.Println("Kafka producer configured with SASL authentication")
+		}
+	}
+
+	writer := kafka.NewWriter(writerConfig)
 	return &KafkaProducer{writer: writer}
 }
 

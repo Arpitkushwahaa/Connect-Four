@@ -41,13 +41,13 @@ func main() {
 	}
 
 	// Initialize Kafka
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		kafkaBroker = "localhost:9092"
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = "localhost:9092"
 	}
 
 	// Initialize services
-	gameService := services.NewGameService(db, kafkaBroker)
+	gameService := services.NewGameService(db, kafkaBrokers)
 	matchmakingService := services.NewMatchmakingService(gameService)
 
 	// Start matchmaking loop

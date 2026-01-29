@@ -12,7 +12,43 @@ services:
         fromDatabase:
           name: connect4-db
           property: connectionString
+      - key: KAFKA_ENABLED
+        value: true
+      - key: KAFKA_BROKERS
+        sync: false
+      - key: KAFKA_TOPIC
+        value: game-events
+      - key: KAFKA_USERNAME
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false
+      - key: KAFKA_SASL_MECHANISM
+        value: SCRAM-SHA-512
     healthCheckPath: /api/health
+
+  # Analytics Service
+  - type: web
+    name: connect4-analytics
+    env: docker
+    dockerfilePath: ./analytics/Dockerfile
+    dockerContext: ./analytics
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: connect4-db
+          property: connectionString
+      - key: KAFKA_BROKERS
+        sync: false
+      - key: KAFKA_TOPIC
+        value: game-events
+      - key: KAFKA_GROUP_ID
+        value: analytics-consumer
+      - key: KAFKA_USERNAME
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false
+      - key: KAFKA_SASL_MECHANISM
+        value: SCRAM-SHA-512
 
   # Frontend Service
   - type: web

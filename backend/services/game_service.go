@@ -4,6 +4,7 @@ import (
 	"connect-four-backend/models"
 	"database/sql"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -16,17 +17,27 @@ type GameService struct {
 	playerGames  map[string]string // playerID -> gameID
 	gamesMutex   sync.RWMutex
 	kafka        *KafkaProducer
+	kafkaEnabled bool
 	disconnected map[string]time.Time // playerID -> disconnect time
 }
 
-func NewGameService(db *sql.DB, kafkaBroker string) *GameService {
-	kafka := NewKafkaProducer(kafkaBroker)
+func NewGameService(db *sql.DB, kafkaBrokers string) *GameService {
+	var kafka *KafkaProducer
+	kafkaEnabled := os.Getenv("KAFKA_ENABLED") == "true"
+
+	if kafkaEnabled {
+		kafka = NewKafkaProducer(kafkaBrokers)
+		log.Println("Game service initialized with Kafka enabled")
+	} else {
+		log.Println("Game service initialized with Kafka disabled")
+	}
 
 	gs := &GameService{
 		db:           db,
 		games:        make(map[string]*models.Game),
 		playerGames:  make(map[string]string),
 		kafka:        kafka,
+		kafkaEnabled: kafkaEnabled,
 		disconnected: make(map[string]time.Time),
 	}
 
@@ -56,15 +67,17 @@ func (gs *GameService) JoinGame(game *models.Game, player *models.Player) {
 	gs.playerGames[player.ID] = game.ID
 
 	// Send Kafka event
-	gs.kafka.SendEvent(GameStartEvent{
-		Type:       "game_start",
-		GameID:     game.ID,
-		Player1:    game.Player1.Username,
-		Player2:    game.Player2.Username,
-		Player1Bot: game.Player1.IsBot,
-		Player2Bot: game.Player2.IsBot,
-		Timestamp:  time.Now(),
-	})
+	if gs.kafkaEnabled && gs.kafka != nil {
+		gs.kafka.SendEvent(GameStartEvent{
+			Type:       "game_start",
+			GameID:     game.ID,
+			Player1:    game.Player1.Username,
+			Player2:    game.Player2.Username,
+			Player1Bot: game.Player1.IsBot,
+			Player2Bot: game.Player2.IsBot,
+			Timestamp:  time.Now(),
+		})
+	}
 }
 
 func (gs *GameService) MakeMove(gameID string, playerID string, column int) error {
@@ -96,14 +109,16 @@ func (gs *GameService) MakeMove(gameID string, playerID string, column int) erro
 	}
 
 	// Send move event to Kafka
-	gs.kafka.SendEvent(GameMoveEvent{
-		Type:      "game_move",
-		GameID:    gameID,
-		Player:    playerName,
-		Column:    column,
-		Row:       row,
-		Timestamp: time.Now(),
-	})
+	if gs.kafkaEnabled && gs.kafka != nil {
+		gs.kafka.SendEvent(GameMoveEvent{
+			Type:      "game_move",
+			GameID:    gameID,
+			Player:    playerName,
+			Column:    column,
+			Row:       row,
+			Timestamp: time.Now(),
+		})
+	}
 
 	// Check for winner
 	hasWon, winner, winningLine := CheckWinner(game)
@@ -278,15 +293,17 @@ func (gs *GameService) saveGameResult(game *models.Game, reason string) {
 	}
 
 	// Send Kafka event
-	gs.kafka.SendEvent(GameEndEvent{
-		Type:       "game_end",
-		GameID:     game.ID,
-		Winner:     winnerName,
-		Duration:   duration,
-		TotalMoves: totalMoves,
-		Reason:     reason,
-		Timestamp:  time.Now(),
-	})
+	if gs.kafkaEnabled && gs.kafka != nil {
+		gs.kafka.SendEvent(GameEndEvent{
+			Type:       "game_end",
+			GameID:     game.ID,
+			Winner:     winnerName,
+			Duration:   duration,
+			TotalMoves: totalMoves,
+			Reason:     reason,
+			Timestamp:  time.Now(),
+		})
+	}
 }
 
 func (gs *GameService) updateLeaderboard(username string, result string) {
