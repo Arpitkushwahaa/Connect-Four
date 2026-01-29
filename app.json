@@ -1,0 +1,24 @@
+{
+  "name": "4-in-a-row",
+  "description": "Real-time Connect Four game",
+  "stack": "container",
+  "addons": [
+    {
+      "plan": "heroku-postgresql:mini"
+    },
+    {
+      "plan": "heroku-kafka:basic-0"
+    }
+  ],
+  "env": {
+    "PORT": {
+      "value": "8080"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+services:
+  # Backend API Server
+  - type: web
+    name: connect4-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        fromDatabase:
+          name: connect4-db
+          property: connectionString
+      - key: KAFKA_BROKER
+        value: localhost:9092
+    
+  # Analytics Service
+  - type: worker
+    name: connect4-analytics
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ../analytics
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: connect4-db
+          property: connectionString
+      - key: KAFKA_BROKER
+        value: localhost:9092
+
+databases:
+  - name: connect4-db
+    databaseName: connectfour
+    user: postgres
+    plan: free

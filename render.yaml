@@ -1,0 +1,32 @@
+services:
+  # Backend Service
+  - type: web
+    name: connect4-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        fromDatabase:
+          name: connect4-db
+          property: connectionString
+    healthCheckPath: /api/health
+
+  # Frontend Service
+  - type: web
+    name: connect4-frontend
+    env: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: REACT_APP_WS_URL
+        value: wss://connect4-backend.onrender.com/ws
+      - key: REACT_APP_API_URL
+        value: https://connect4-backend.onrender.com
+
+databases:
+  - name: connect4-db
+    databaseName: connectfour
+    user: postgres
