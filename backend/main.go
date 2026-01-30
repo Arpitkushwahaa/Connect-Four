@@ -61,6 +61,9 @@ func main() {
 	mux.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		handlers.HandleLeaderboard(w, r, gameService)
 	})
+	mux.HandleFunc("/api/analytics", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleAnalytics(w, r, db)
+	})
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
